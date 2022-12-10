@@ -3,7 +3,7 @@
     "version": "0.0.0",
     "command_name": "certify",
     "original_author": "@GhostPack (HarmJ0y)",
-    "repo_url": "https://github.com/sliverarmory/Certify",
+    "repo_url": "https://github.com/NightlyEscaper/Certify",
     "help": "Certify is a C# tool to enumerate and abuse misconfigurations in Active Directory Certificate Services",
 
     "entrypoint": "Main",

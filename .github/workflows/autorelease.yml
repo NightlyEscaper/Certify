@@ -1,22 +1,67 @@
-name: Release
+name: 'Release'
 
 on:
-  push:
-    tags: ["v[0-9]+.[0-9]+.[0-9]+"]
-    branches: ["master"]
+  schedule:
+    - cron:  '0 5 * * 0'
+    # scheduled at 05:00 every Sunday
+
+  workflow_dispatch:  # click the button on Github repo!
 
 jobs:
+  sync_latest_from_upstream:
+    runs-on: ubuntu-latest
+    name: Sync latest commits from upstream repo
+    outputs:
+      status: ${{ steps.sync.outputs.has_new_commits }}
+      tag:   ${{ steps.tag.outputs.tag }}
+    steps:
+    # REQUIRED step
+    # Step 1: run a standard checkout action, provided by github
+    - name: Checkout target repo
+      uses: actions/checkout@v2
+      with:
+        # optional: set the branch to checkout,
+        # sync action checks out your 'target_sync_branch' anyway
+        ref:  main
+        # REQUIRED if your upstream repo is private (see wiki)
+        persist-credentials: false
+
+    # REQUIRED step
+    # Step 2: run the sync action
+    - name: Sync upstream changes
+      id: sync
+      uses: aormsby/Fork-Sync-With-Upstream-action@v3.4
+      with:
+        target_sync_branch: main
+        # REQUIRED 'target_repo_token' exactly like this!
+        target_repo_token: ${{ secrets.GITHUB_TOKEN }}
+        upstream_sync_branch: main
+        upstream_sync_repo: GhostPack/Certify
+        shallow_since: '1 year ago'
+
+    # Step 3: Publish with tag.
+    - name: Bump version and push tag
+      id: tag
+      if: steps.sync.outputs.has_new_commits == 'true'
+      uses: anothrNick/github-tag-action@v1
+      env:
+        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        WITH_V: true
+        DEFAULT_BUMP: patch
 
   linux-windows-build:
     name: CSharp Build
-    if: startsWith( github.ref, 'refs/tags/v')
-    runs-on: windows-latest
+    #if: startsWith( github.ref, 'refs/tags/v')
+    needs: [sync_latest_from_upstream]
+    if: needs.sync_latest_from_upstream.outputs.status == 'true'
+    runs-on: windows-2019
     timeout-minutes: 45
+
     steps:
 
     - name: Add msbuild to PATH
       uses: microsoft/setup-msbuild@v1.1
-  
+
     - name: Check out code
       uses: actions/checkout@v2
 
@@ -36,11 +81,9 @@ jobs:
         Copy-Item -Path Certify\compiled\Certify.exe -Destination compiled\Certify.exe
 
     - name: Build Package
-      # Powershell is utter fucking trash.
+      # Powershell is utter fucking trash. I AGREEEEEEEEEEEE!!!
       run: |
-        $Version = git.exe describe --tags --abbrev=0
-        $Version = "`"$Version`""
-        Get-Content -Path alias.json | .\jq.exe ".version |= `"$Version`"" > ./compiled/alias.json
+        Get-Content -Path alias.json | .\jq.exe '.version |= ""${{ needs.sync_latest_from_upstream.outputs.tag }}""' > ./compiled/alias.json
         Copy-Item -Path LICENSE -Destination compiled\LICENSE
         cd compiled
         ls
@@ -59,6 +102,7 @@ jobs:
       with:
         repo_token: "${{ secrets.GITHUB_TOKEN }}"
         prerelease: false
+        automatic_release_tag: ${{ needs.sync_latest_from_upstream.outputs.tag }}
         files: |
           certify.minisig
           certify.tar.gz
