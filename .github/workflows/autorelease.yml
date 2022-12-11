@@ -13,7 +13,7 @@ jobs:
     name: Sync latest commits from upstream repo
     outputs:
       status: ${{ steps.sync.outputs.has_new_commits }}
-      tag:   ${{ steps.tag.outputs.tag }}
+      tag:   ${{ steps.tag.outputs.tag || steps.lastesttag.outputs.tag }}
     steps:
     # REQUIRED step
     # Step 1: run a standard checkout action, provided by github
@@ -22,9 +22,10 @@ jobs:
       with:
         # optional: set the branch to checkout,
         # sync action checks out your 'target_sync_branch' anyway
-        ref:  main
+        ref:  master
         # REQUIRED if your upstream repo is private (see wiki)
         persist-credentials: false
+        fetch-depth: 0
 
     # REQUIRED step
     # Step 2: run the sync action
@@ -49,6 +50,14 @@ jobs:
         WITH_V: true
         DEFAULT_BUMP: patch
 
+    # Step 4: Get Latest tag
+    - name: 'Get Latest tag'
+      id: lastesttag
+      if: steps.sync.outputs.has_new_commits == 'false'
+      uses: "WyriHaximus/github-action-get-previous-tag@v1"
+      with:
+        fallback: '' # Optional fallback tag to use when no tag can be found
+        
   linux-windows-build:
     name: CSharp Build
     #if: startsWith( github.ref, 'refs/tags/v')
